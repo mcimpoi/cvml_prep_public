@@ -28,8 +28,8 @@ class Transformer(nn.Module):
         dropout_prob: float = 0.1,
     ):
         super().__init__()
-        self.encoder = Encoder(n_blocks, d_model, num_heads)
-        self.decoder = Decoder(n_blocks, d_model, num_heads)
+        self.encoder = Encoder(n_blocks, d_model, num_heads, d_ff)
+        self.decoder = Decoder(n_blocks, d_model, num_heads, d_ff)
         self.src_embed = nn.Sequential(
             nn.Embedding(src_vocab_size, d_model),
             PositionalEncoding(d_model, dropout_prob),
@@ -97,7 +97,7 @@ class EncoderLayer(nn.Module):
         logger.debug(
             f"EncoderLayer: x: {x.shape}, mask: {mask.shape if mask is not None else None}"
         )
-        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask)[0])
+        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))
         return self.sublayer[1](x, self.feed_forward)
 
 
@@ -119,9 +119,8 @@ class DecoderLayer(nn.Module):
         )
 
     def forward(self, x, memory, src_mask=None, tgt_mask=None):
-        m = memory
-        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, tgt_mask)[0])
-        x = self.sublayer[1](x, lambda x: self.src_attn(x, m, m, src_mask)[0])
+        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, tgt_mask))
+        x = self.sublayer[1](x, lambda x: self.src_attn(x, memory, memory, src_mask))
         return self.sublayer[2](x, self.feed_forward)
 
 
