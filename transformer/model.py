@@ -5,7 +5,6 @@ import math
 import torch
 import torch.nn as nn
 
-from typing import Tuple
 import logging
 
 logger = logging.getLogger(__name__)
@@ -48,10 +47,20 @@ class Transformer(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, n_blocks: int, d_model: int, num_heads: int, d_ff: int) -> None:
+    def __init__(
+        self,
+        n_blocks: int,
+        d_model: int,
+        num_heads: int,
+        d_ff: int,
+        dropout_prob: float = 0.1,
+    ) -> None:
         super().__init__()
         self.layers = nn.ModuleList(
-            [EncoderLayer(d_model, num_heads) for _ in range(n_blocks)]
+            [
+                EncoderLayer(d_model, num_heads, d_ff, dropout_prob)
+                for _ in range(n_blocks)
+            ]
         )
         self.norm = nn.LayerNorm(d_model)
 
@@ -62,10 +71,20 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, n_blocks: int, d_model: int, num_heads: int, d_ff: int) -> None:
+    def __init__(
+        self,
+        n_blocks: int,
+        d_model: int,
+        num_heads: int,
+        d_ff: int,
+        dropout_prob: float = 0.1,
+    ) -> None:
         super().__init__()
         self.layers = nn.ModuleList(
-            [DecoderLayer(d_model, num_heads, d_ff) for _ in range(n_blocks)]
+            [
+                DecoderLayer(d_model, num_heads, d_ff, dropout_prob)
+                for _ in range(n_blocks)
+            ]
         )
         self.norm = nn.LayerNorm(d_model)
 
@@ -88,14 +107,19 @@ class EncoderLayer(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.self_attn = MultiHeadedAttention(num_heads, d_model, dropout_prob)
-        self.feed_forward = PositionwiseFeedForward(d_model, d_ff, dropout_prob)
+        self.feed_forward = PositionwiseFeedForward(
+            d_model,
+            d_ff,
+            dropout_prob,
+        )
         self.sublayer = nn.ModuleList(
             [SublayerConnection(d_model, dropout_prob) for _ in range(2)]
         )
 
     def forward(self, x, mask=None):
         logger.debug(
-            f"EncoderLayer: x: {x.shape}, mask: {mask.shape if mask is not None else None}"
+            f"EncoderLayer: x: {x.shape}"
+            + f"mask: {mask.shape if mask is not None else None}"
         )
         x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))
         return self.sublayer[1](x, self.feed_forward)
@@ -113,14 +137,26 @@ class DecoderLayer(nn.Module):
         self.d_model = d_model
         self.self_attn = MultiHeadedAttention(num_heads, d_model, dropout_prob)
         self.src_attn = MultiHeadedAttention(num_heads, d_model, dropout_prob)
-        self.feed_forward = PositionwiseFeedForward(d_model, d_ff, dropout_prob)
+        self.feed_forward = PositionwiseFeedForward(
+            d_model,
+            d_ff,
+            dropout_prob,
+        )
         self.sublayer = nn.ModuleList(
             [SublayerConnection(d_model, dropout_prob) for _ in range(3)]
         )
 
     def forward(self, x, memory, src_mask=None, tgt_mask=None):
         x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, tgt_mask))
-        x = self.sublayer[1](x, lambda x: self.src_attn(x, memory, memory, src_mask))
+        x = self.sublayer[1](
+            x,
+            lambda x: self.src_attn(
+                x,
+                memory,
+                memory,
+                src_mask,
+            ),
+        )
         return self.sublayer[2](x, self.feed_forward)
 
 
@@ -154,7 +190,12 @@ class PositionwiseFeedForward(nn.Module):
 
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, dropout_prob: float = 0.1, max_len: int = 5000):
+    def __init__(
+        self,
+        d_model: int,
+        dropout_prob: float = 0.1,
+        max_len: int = 5000,
+    ):
         super().__init__()
         self.dropout = nn.Dropout(dropout_prob)
         self.d_model = d_model
@@ -216,7 +257,12 @@ class DotProductAttention(nn.Module):
 class MultiHeadedAttention(nn.Module):
     """Multi-Head Attention"""
 
-    def __init__(self, num_heads: int, d_model: int, dropout_prob: float = 0.1) -> None:
+    def __init__(
+        self,
+        num_heads: int,
+        d_model: int,
+        dropout_prob: float = 0.1,
+    ) -> None:
         """Initialize Multi-Head Attention
 
         Args:
@@ -226,6 +272,7 @@ class MultiHeadedAttention(nn.Module):
         """
         super().__init__()
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
+
         # assumes dq = dk = dv = d_model / num_heads
         self.d_k = d_model // num_heads
         self.num_heads = num_heads
@@ -257,9 +304,10 @@ class MultiHeadedAttention(nn.Module):
         )
 
         logger.debug(
-            f"Q: {Q.shape}, K: {K.shape}, V: {V.shape}, mask: {mask.shape if mask is not None else None}"
+            f"Q: {Q.shape}, K: {K.shape}, V: {V.shape}, "
+            + "mask: {mask.shape if mask is not None else None}"
         )
-        x, _ = self.attention(Q, K, V, mask=mask, dropout_prob=self.dropout_prob)
+        x, _ = self.attention(Q, K, V, mask, self.dropout_prob)
 
         x = (
             x.transpose(1, 2)

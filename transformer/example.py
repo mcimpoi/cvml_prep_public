@@ -4,6 +4,7 @@ import torch.nn as nn
 import logging
 
 from transformer.model import Transformer
+from transformer.training import run_epoch
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -25,7 +26,11 @@ def subsequent_mask(size: int) -> torch.Tensor:
     return mask == 0
 
 
-if __name__ == "__main__":
+def generate_data(batch_size: int, vocab_size: int):
+    pass
+
+
+def example_inference() -> None:
     model: Transformer = Transformer(
         n_blocks=2,
         d_model=128,
@@ -56,3 +61,52 @@ if __name__ == "__main__":
         ys = torch.cat([ys, torch.tensor([[next_word]]).type_as(src)], dim=1)
 
     print(f"Example untrained model prediction: {ys}")
+
+
+def example_simple_model_train():
+    VOCAB_SIZE = 11
+    model: Transformer = Transformer(
+        n_blocks=2,
+        d_model=64,
+        num_heads=8,
+        src_vocab_size=VOCAB_SIZE,
+        tgt_vocab_size=VOCAB_SIZE,
+        dropout_prob=0.1,
+    )
+    model = init_model_xavier(model)
+
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=0.001,
+        betas=(0.9, 0.98),
+        eps=1e-9,
+    )
+
+    lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer,
+        # TODO: compare with lthe learning rate formula from paper / blog
+        lr_lambda=lambda step: 0.95**step + 1,
+    )
+
+    batch_size = 10
+
+    for epoch in range(20):
+        model.train()
+        for i in range(10):
+            run_epoch(
+                data_iter=generate_data(batch_size, VOCAB_SIZE),
+                model=model,
+                criterion=nn.CrossEntropyLoss(),
+                optimizer=optimizer,
+                scheduler=lr_scheduler,
+                mode="train",
+                accum_iter=1,
+            )
+
+
+# TODO: greedy decode
+# run eval model
+
+if __name__ == "__main__":
+    for _ in range(10):
+        example_inference()
