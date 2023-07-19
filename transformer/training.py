@@ -6,10 +6,10 @@ import torch.utils.data
 
 from transformer.model import Transformer
 
-from typing import Tuple
+from typing import Generator, Tuple
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 
 class TrainState:
@@ -21,7 +21,7 @@ class TrainState:
 
 
 def run_epoch(
-    data_iter: torch.utils.data.DataLoader,
+    data_iter: Generator,
     model: Transformer,
     criterion: nn.Module,
     optimizer: torch.optim.Optimizer,

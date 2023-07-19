@@ -8,7 +8,7 @@ import torch.nn as nn
 import logging
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 DEFAULT_D_FF: int = 2048
 DEFAULT_ATTN_HEADS: int = 8
@@ -65,6 +65,10 @@ class Encoder(nn.Module):
         self.norm = nn.LayerNorm(d_model)
 
     def forward(self, x, src_mask):
+        logger.debug(
+            f"x: {x.shape}, src_mask:"
+            f" {src_mask.shape if src_mask is not None else None}"
+        )
         for layer in self.layers:
             x = layer(x, src_mask)
         return self.norm(x)
