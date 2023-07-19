@@ -326,8 +326,10 @@ class MultiHeadedAttention(nn.Module):
         # key: (batch_size, n_keys, d_model)
         # value: (batch_size, n_keys, d_model)
         # ?? mask: (batch_size, n_queries, n_keys)
-
         scores = torch.matmul(query, key.transpose(-2, -1)) / self.d_k**0.5
+        logger.debug(f"query: {query.shape}, key: {key.shape}, value: {value.shape}")
+        logger.debug(f"scores: {scores.shape}")
+        logger.debug(f"mask: {mask.shape if mask is not None else None}")
         if mask is not None:
             scores = scores.masked_fill(mask == 0, -1e9)
         p_attn = scores.softmax(dim=-1)
