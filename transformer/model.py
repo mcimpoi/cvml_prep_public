@@ -66,7 +66,7 @@ class Encoder(nn.Module):
 
     def forward(self, x, src_mask):
         logger.debug(
-            f"x: {x.shape}, src_mask:"
+            f"Enc::forward::\n  x: {x.shape}, src_mask:"
             f" {src_mask.shape if src_mask is not None else None}"
         )
         for layer in self.layers:
@@ -95,7 +95,9 @@ class Decoder(nn.Module):
     def forward(self, x, memory, src_mask, tgt_mask):
         for layer in self.layers:
             x = layer(x, memory, src_mask, tgt_mask)
-        return self.norm(x)
+        out = self.norm(x)
+        logger.debug(f"Decoder::forward:: out: {out.shape}")
+        return out
 
 
 class EncoderLayer(nn.Module):
@@ -122,7 +124,7 @@ class EncoderLayer(nn.Module):
 
     def forward(self, x, mask=None):
         logger.debug(
-            f"EncoderLayer: x: {x.shape}"
+            f"EncoderLayer::forward\n x: {x.shape}"
             + f"mask: {mask.shape if mask is not None else None}"
         )
         x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))
@@ -290,6 +292,13 @@ class MultiHeadedAttention(nn.Module):
 
     def forward(self, query, key, value, mask=None):
         # query: (batch_size, n_queries, d_model)
+
+        # this seems important!
+        # same mask is applied to all heads
+
+        if mask is not None:
+            mask = mask.unsqueeze(1)
+
         logger.debug(f"MultiHeadedAttention:: query: {query.shape}")
         Q = (
             self.Wq(query)
@@ -309,7 +318,7 @@ class MultiHeadedAttention(nn.Module):
 
         logger.debug(
             f"Q: {Q.shape}, K: {K.shape}, V: {V.shape}, "
-            + "mask: {mask.shape if mask is not None else None}"
+            + f"mask: {mask.shape if mask is not None else None}"
         )
         x, _ = self.attention(Q, K, V, mask, self.dropout_prob)
 
@@ -319,7 +328,9 @@ class MultiHeadedAttention(nn.Module):
             .view(x.shape[0], -1, self.num_heads * self.d_k)
         )
 
-        return self.Wo(x)
+        out = self.Wo(x)
+        logger.debug(f"out: {out.shape}")
+        return out
 
     def attention(self, query, key, value, mask=None, dropout_prob=None):
         # query: (batch_size, vocab_size
@@ -327,7 +338,9 @@ class MultiHeadedAttention(nn.Module):
         # value: (batch_size, n_keys, d_model)
         # ?? mask: (batch_size, n_queries, n_keys)
         scores = torch.matmul(query, key.transpose(-2, -1)) / self.d_k**0.5
-        logger.debug(f"query: {query.shape}, key: {key.shape}, value: {value.shape}")
+        logger.debug(
+            f"attn::\n query: {query.shape}, key: {key.shape}, value: {value.shape}"
+        )
         logger.debug(f"scores: {scores.shape}")
         logger.debug(f"mask: {mask.shape if mask is not None else None}")
         if mask is not None:

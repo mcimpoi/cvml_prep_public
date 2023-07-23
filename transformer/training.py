@@ -3,10 +3,11 @@ import logging
 import torch
 import torch.nn as nn
 import torch.utils.data
+import time
 
 from transformer.model import Transformer
 
-from typing import Generator, Tuple
+from typing import Generator, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -24,11 +25,12 @@ def run_epoch(
     data_iter: Generator,
     model: Transformer,
     criterion: nn.Module,
-    optimizer: torch.optim.Optimizer,
-    scheduler: torch.optim.lr_scheduler._LRScheduler,
+    optimizer: Optional[torch.optim.Optimizer],
+    scheduler: Optional[torch.optim.lr_scheduler.LRScheduler],
     mode: str = "train",
     accum_iter: int = 1,
     train_state=TrainState(),  # TODO: do we need it?
+    log_freq: int = 50,
 ) -> Tuple[float, TrainState]:
     """
     Standard Training and Logging Function
@@ -37,6 +39,7 @@ def run_epoch(
     total_loss = 0
     tokens = 0
     n_accum = 0
+    start_time = time.time()
 
     for i, batch in enumerate(data_iter):
         out = model.forward(
@@ -55,15 +58,28 @@ def run_epoch(
             train_state.tokens += batch.n_tokens
 
             if i % accum_iter == 0:
-                optimizer.step()
-                optimizer.zero_grad()  # set_to_none=True by default
-                scheduler.step()
+                if optimizer is not None:
+                    optimizer.step()
+                    optimizer.zero_grad()  # set_to_none=True by default
                 n_accum += 1
                 train_state.accum_step += 1
-            scheduler.step()
+            if scheduler is not None:
+                scheduler.step()
 
         total_loss += loss
         total_tokens += batch.n_tokens
         tokens += batch.n_tokens
+
+        if i % log_freq == 1 and mode.startswith("train"):
+            elapsed = time.time() - start_time
+            if optimizer is None:
+                logger.warning("Optimizer should not be None in train mode")
+            lr = optimizer.param_groups[0]["lr"]
+            logger.info(
+                f"Epoch Step: {i:06d} | Accummulation step {n_accum:03d} | "
+                f"Loss: {loss_node.item():.2f} |"
+                f" Tokens per Sec: {tokens / elapsed:.2f} Lr: {lr:.6f}"
+            )
+            tokens = 0
 
     return total_loss, train_state

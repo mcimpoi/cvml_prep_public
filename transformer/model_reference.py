@@ -68,7 +68,8 @@ class Encoder(nn.Module):
     def forward(self, x, mask):
         "Pass the input (and mask) through each layer in turn."
         logger.debug(
-            f"x: {x.shape}, src_mask: {mask.shape if mask is not None else None}"
+            f"Enc::forward::\n  x: {x.shape}, src_mask:"
+            f" {mask.shape if mask is not None else None}"
         )
         for layer in self.layers:
             x = layer(x, mask)
@@ -118,10 +119,13 @@ class EncoderLayer(nn.Module):
 
     def forward(self, x, mask):
         "Follow Figure 1 (left) for connections."
-        print("EncoderLayer:: X_in shape", x.shape)
+        logger.debug(
+            f"EncoderLayer::forward\n x: {x.shape}"
+            + f"mask: {mask.shape if mask is not None else None}"
+        )
         x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))
         out = self.sublayer[1](x, self.feed_forward)
-        print(f"EncoderLayer:: Out shape {out.shape}")
+        logger.debug(f"EncoderLayer:: Out shape {out.shape}")
         return out
 
 
@@ -136,7 +140,10 @@ class Decoder(nn.Module):
     def forward(self, x, memory, src_mask, tgt_mask):
         for layer in self.layers:
             x = layer(x, memory, src_mask, tgt_mask)
-        return self.norm(x)
+
+        out = self.norm(x)
+        logger.debug(f"Decoder::forward:: out: {out.shape}")
+        return out
 
 
 class DecoderLayer(nn.Module):
@@ -211,7 +218,7 @@ class MultiHeadedAttention(nn.Module):
             for lin, x in zip(self.linears, (query, key, value))
         ]
 
-        print(
+        logger.debug(
             f"""After projection Q: {query.shape}, K: {key.shape},
             value: {value.shape}\n
             """
@@ -223,7 +230,7 @@ class MultiHeadedAttention(nn.Module):
         # 3) "Concat" using a view and apply a final linear.
         x = x.transpose(1, 2).contiguous().view(nbatches, -1, self.h * self.d_k)
 
-        print(f"concat, before last linear {x.shape}")
+        logger.debug(f"concat, before last linear {x.shape}")
         del query
         del key
         del value
@@ -318,7 +325,7 @@ def inference_test():
             [ys, torch.empty(1, 1).type_as(src.data).fill_(next_word)], dim=1
         )
 
-    print("Example Untrained Model Prediction:", ys)
+    logger.info("Example Untrained Model Prediction:", ys)
 
 
 def run_tests():
@@ -396,7 +403,7 @@ def run_epoch(
         if i % 40 == 1 and (mode == "train" or mode == "train+log"):
             lr = optimizer.param_groups[0]["lr"]
             elapsed = time.time() - start
-            print(
+            logger.info(
                 (
                     "Epoch Step: %6d | Accumulation Step: %3d | Loss: %6.2f "
                     + "| Tokens / Sec: %7.1f | Learning Rate: %6.1e"

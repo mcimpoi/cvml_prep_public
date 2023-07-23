@@ -57,6 +57,23 @@ def generate_synthetic_data(vocab_size: int, batch_size: int, n_batches: int):
         yield Batch(src, tgt, 0)
 
 
+# TODO: This is copy paste. To understand what it does.
+def greedy_decode(model, src, src_mask, max_len, start_symbol):
+    memory = model.encode(src, src_mask)
+    ys = torch.zeros(1, 1).fill_(start_symbol).type_as(src.data)
+    for i in range(max_len - 1):
+        out = model.decode(
+            memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
+        )
+        prob = model.generator(out[:, -1])
+        _, next_word = torch.max(prob, dim=1)
+        next_word = next_word.data[0]
+        ys = torch.cat(
+            [ys, torch.zeros(1, 1).type_as(src.data).fill_(next_word)], dim=1
+        )
+    return ys
+
+
 def example_inference(decode_steps: int = 10) -> None:
     model: Transformer = Transformer(
         n_blocks=2,
@@ -94,7 +111,9 @@ def example_inference(decode_steps: int = 10) -> None:
     print(f"Example untrained model prediction: {ys}")
 
 
-def example_simple_model_train():
+def example_simple_model_train(
+    n_epochs: int = 10,
+):
     VOCAB_SIZE = 11
     model: Transformer = Transformer(
         n_blocks=2,
@@ -121,7 +140,8 @@ def example_simple_model_train():
 
     batch_size = 10
 
-    for epoch in range(n_epochs):
+    model.train()
+    for _ in range(n_epochs):
         model.train()
         run_epoch(
             data_iter=generate_synthetic_data(
@@ -136,6 +156,27 @@ def example_simple_model_train():
             mode="train",
             accum_iter=1,
         )
+
+        model.eval()
+        eval_loss, _ = run_epoch(
+            data_iter=generate_synthetic_data(
+                vocab_size=VOCAB_SIZE,
+                batch_size=batch_size,
+                n_batches=5,
+            ),
+            model=model,
+            criterion=nn.CrossEntropyLoss(),
+            optimizer=None,
+            scheduler=None,
+            mode="eval",
+        )
+        logger.info(f"Eval loss: {eval_loss}")
+
+    model.eval()
+    src = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]])
+    max_len = src.shape[1]
+    src_mask = torch.ones(1, 1, max_len)
+    print(greedy_decode(model, src, src_mask, max_len=max_len, start_symbol=0))
 
 
 # TODO: greedy decode
@@ -169,23 +210,23 @@ def test_data_iter(model: Transformer, data_iter=None):
         f"Batch src_mask: {batch.src_mask.shape} Batch tgt_mask: {batch.tgt_mask.shape}"
     )
 
-    # out = model.forward(
-    #     batch.src,
-    #     batch.tgt,
-    #     batch.src_mask,
-    #     batch.tgt_mask,
-    # )
-    # print(f"out shape: {out.shape}")
+    out = model.forward(
+        batch.src,
+        batch.tgt,
+        batch.src_mask,
+        batch.tgt_mask,
+    )
+    print(f"out shape: {out.shape}")
 
 
 if __name__ == "__main__":
     # example_inference()
 
-    model = get_model(11, 11, n_blocks=2, d_model=512)
+    model = get_model(11, 11, n_blocks=2, d_model=512, n_heads=8)
 
     from model_reference import make_model, data_gen
 
-    model_ref = make_model(11, 11, N=2)
+    model_ref = make_model(11, 11, N=2, d_model=512)
 
     data_iter = generate_synthetic_data(11, 2, 5)
     data_iter_ref = data_gen(11, 2, 5)
@@ -194,11 +235,5 @@ if __name__ == "__main__":
     test_data_iter(model_ref, data_iter_ref)
 
     model.train()
-    model_ref.train()
 
-    data_iter = generate_synthetic_data(11, 2, 1)
-    batch = next(data_iter)
-
-    # res = model.forward(batch.src, batch.tgt, batch.src_mask, batch.tgt_mask)
-    res = model.encode(batch.src, batch.src_mask)
-    logger.debug(f"res shape: {res.shape}")
+    example_simple_model_train(n_epochs=20)
