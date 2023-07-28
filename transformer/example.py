@@ -80,6 +80,7 @@ def example_inference(decode_steps: int = 10) -> None:
 
 def example_simple_model_train(
     n_epochs: int = 10,
+    batch_size: int = 80,
 ):
     VOCAB_SIZE = 11
     model: Transformer = Transformer(
@@ -106,8 +107,6 @@ def example_simple_model_train(
     )
 
     label_smoothing = LabelSmoothing(VOCAB_SIZE, padding_idx=0, smoothing=0.0)
-
-    batch_size = 10
 
     model.train()
     for epoch in range(n_epochs):
@@ -144,7 +143,7 @@ def example_simple_model_train(
         logger.info(
             (
                 f"Epoch: {epoch} Train loss: {train_loss:.3f}"
-                f"Eval loss: {eval_loss:.3f}"
+                " Eval loss: {eval_loss:.3f}"
             )
         )
 
@@ -214,4 +213,4 @@ if __name__ == "__main__":
 
     model.train()
 
-    example_simple_model_train(n_epochs=20)
+    example_simple_model_train(n_epochs=40, batch_size=80)
