@@ -8,7 +8,7 @@ import torch.nn as nn
 import logging
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 DEFAULT_D_FF: int = 2048
 DEFAULT_ATTN_HEADS: int = 8
@@ -349,3 +349,27 @@ class MultiHeadedAttention(nn.Module):
         if dropout_prob is not None:
             p_attn = nn.Dropout(dropout_prob)(p_attn)
         return torch.matmul(p_attn, value), p_attn
+
+
+class LabelSmoothing(nn.Module):
+    "Implement label smoothing."
+
+    def __init__(self, size, padding_idx, smoothing=0.0):
+        super().__init__()
+        self.padding_idx = padding_idx
+        self.confidence = 1.0 - smoothing
+        self.smoothing = smoothing
+        self.size = size
+        self.true_dist = None
+
+    def forward(self, x, target):
+        # logger.debug(f"x: {x.size()}, target: {target.size()}")
+        assert x.size(1) == self.size
+        true_dist = torch.ones_like(x) * self.smoothing / (self.size - 2)
+        true_dist.scatter_(1, target.unsqueeze(1), self.confidence)
+        true_dist[:, self.padding_idx] = 0
+        mask = torch.nonzero(target.data == self.padding_idx)
+        if mask.dim() > 0:
+            true_dist.index_fill_(0, mask.squeeze(), 0.0)
+        self.true_dist = true_dist
+        return self.true_dist

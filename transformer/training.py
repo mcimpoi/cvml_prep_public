@@ -10,7 +10,7 @@ from transformer.model import Transformer
 from typing import Generator, Tuple, Optional
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 class TrainState:
@@ -24,7 +24,8 @@ class TrainState:
 def run_epoch(
     data_iter: Generator,
     model: Transformer,
-    criterion: nn.Module,
+    criterion: nn.Module,  # loss function
+    label_smoothing: nn.Module,
     optimizer: Optional[torch.optim.Optimizer],
     scheduler: Optional[torch.optim.lr_scheduler.LRScheduler],
     mode: str = "train",
@@ -48,7 +49,20 @@ def run_epoch(
             batch.src_mask,
             batch.tgt_mask,
         )
-        loss = criterion(out, batch.tgt_y)
+        generator_out = model.generator(out)
+        logger.debug(
+            f"Generator out shape: {generator_out.shape}, tgt_y shape: {batch.tgt_y.shape}"
+        )
+
+        generator_out_dim = generator_out.size(-1)
+        loss = criterion(
+            generator_out.contiguous().view(-1, generator_out_dim),
+            label_smoothing(
+                generator_out.contiguous().view(-1, generator_out_dim),
+                batch.tgt_y.contiguous().view(-1),
+            ),
+        )
+
         loss_node = loss / batch.n_tokens
 
         if mode.startswith("train"):
