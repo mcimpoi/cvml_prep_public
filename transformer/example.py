@@ -1,4 +1,3 @@
-#
 import torch
 import torch.nn as nn
 import logging
@@ -22,6 +21,19 @@ def init_model_xavier(model: nn.Module) -> nn.Module:
         if param.dim() > 1:
             nn.init.xavier_uniform_(param)
     return model
+
+
+def learning_rate_func(
+    step: int,
+    model_size: int,
+    factor: float,
+    warmup: int,
+):
+    if step == 0:
+        step = 1
+    return factor * (
+        model_size ** (-0.5) * min(step ** (-0.5), step * warmup ** (-1.5))
+    )
 
 
 # TODO: This is copy paste. To understand what it does.
@@ -83,15 +95,14 @@ def example_simple_model_train(
     batch_size: int = 80,
 ):
     VOCAB_SIZE = 11
-    model: Transformer = Transformer(
-        n_blocks=2,
-        d_model=64,
-        num_heads=8,
+    model: Transformer = get_model(
         src_vocab_size=VOCAB_SIZE,
         tgt_vocab_size=VOCAB_SIZE,
-        dropout_prob=0.1,
+        n_blocks=2,
+        d_model=512,
+        n_heads=8,
+        d_ff=2048,
     )
-    model = init_model_xavier(model)
 
     optimizer = torch.optim.Adam(
         model.parameters(),
@@ -103,7 +114,12 @@ def example_simple_model_train(
     lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
         optimizer,
         # TODO: compare with lthe learning rate formula from paper / blog
-        lr_lambda=lambda step: 0.95**step + 1,
+        lr_lambda=lambda step: learning_rate_func(
+            step,
+            model_size=model.d_model,
+            factor=1.0,
+            warmup=400,
+        ),
     )
 
     label_smoothing = LabelSmoothing(VOCAB_SIZE, padding_idx=0, smoothing=0.0)
@@ -143,7 +159,7 @@ def example_simple_model_train(
         logger.info(
             (
                 f"Epoch: {epoch} Train loss: {train_loss:.3f}"
-                " Eval loss: {eval_loss:.3f}"
+                f" Eval loss: {eval_loss:.3f}"
             )
         )
 
@@ -164,8 +180,9 @@ def example_simple_model_train(
 def get_model(
     src_vocab_size: int = DEFAULT_VOCAB_SIZE,
     tgt_vocab_size: int = DEFAULT_VOCAB_SIZE,
-    n_blocks: int = 2,
-    d_model: int = 64,
+    n_blocks: int = 6,
+    d_model: int = 512,
+    d_ff: int = 2048,
     n_heads: int = 8,
 ) -> Transformer:
     model: Transformer = Transformer(
@@ -214,3 +231,9 @@ if __name__ == "__main__":
     model.train()
 
     example_simple_model_train(n_epochs=40, batch_size=80)
+
+    from model_reference import (
+        example_simple_model as example_simple_model_train_ref,
+    )
+
+    example_simple_model_train_ref()

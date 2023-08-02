@@ -27,6 +27,7 @@ class Transformer(nn.Module):
         dropout_prob: float = 0.1,
     ):
         super().__init__()
+        self.d_model_ = d_model
         self.encoder = Encoder(n_blocks, d_model, num_heads, d_ff)
         self.decoder = Decoder(n_blocks, d_model, num_heads, d_ff)
         self.src_embed = nn.Sequential(
@@ -44,6 +45,10 @@ class Transformer(nn.Module):
 
     def decode(self, memory, src_mask, tgt, tgt_mask):
         return self.decoder(self.tgt_embed(tgt), memory, src_mask, tgt_mask)
+
+    @property
+    def d_model(self):
+        return self.d_model_
 
 
 class Encoder(nn.Module):
