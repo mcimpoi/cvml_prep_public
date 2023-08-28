@@ -92,7 +92,7 @@ def run_epoch(
             logger.info(
                 f"Epoch Step: {i:06d} | Accummulation step {n_accum:03d} | "
                 f"Loss: {loss_node.item():.2f} |"
-                f" Tokens per Sec: {tokens / elapsed:.2f} Lr: {lr:.6f}"
+                f" Tokens per Sec: {tokens / elapsed:7.1f} Lr: {lr:6.1e}"
             )
             tokens = 0
 

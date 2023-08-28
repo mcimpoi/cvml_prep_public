@@ -11,12 +11,13 @@ from torch.nn.functional import log_softmax
 import copy
 import math
 import time
+from torch.nn import LayerNorm
 
 from torch.optim.lr_scheduler import LambdaLR
 
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 
 class EncoderDecoder(nn.Module):
@@ -66,6 +67,7 @@ class Encoder(nn.Module):
     def __init__(self, layer, N):
         super(Encoder, self).__init__()
         self.layers = clones(layer, N)
+        print(f"!!! Enc layer sz: {layer.size}")
         self.norm = LayerNorm(layer.size)
 
     def forward(self, x, mask):
@@ -79,11 +81,11 @@ class Encoder(nn.Module):
         return self.norm(x)
 
 
-class LayerNorm(nn.Module):
+class LayerNorm2(nn.Module):
     "Construct a layernorm module (See citation for details)."
 
     def __init__(self, features, eps=1e-6):
-        super(LayerNorm, self).__init__()
+        super(LayerNorm2, self).__init__()
         self.a_2 = nn.Parameter(torch.ones(features))
         self.b_2 = nn.Parameter(torch.zeros(features))
         self.eps = eps
@@ -514,14 +516,18 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
 
 
 # Train the simple copy task.
-def example_simple_model():
+def example_simple_model(n_epochs: int = 5, batch_size: int = 80):
     V = 11
     criterion = LabelSmoothing(size=V, padding_idx=0, smoothing=0.0)
     model = make_model(V, V, N=2)
 
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=0.5, betas=(0.9, 0.98), eps=1e-9
+        model.parameters(),
+        lr=0.5,
+        betas=(0.9, 0.98),
+        eps=1e-9,
     )
+
     lr_scheduler = LambdaLR(
         optimizer=optimizer,
         lr_lambda=lambda step: rate(
@@ -532,8 +538,7 @@ def example_simple_model():
         ),
     )
 
-    batch_size = 80
-    for epoch in range(20):
+    for epoch in range(n_epochs):
         model.train()
         run_epoch(
             data_gen(V, batch_size, 20),
@@ -557,7 +562,14 @@ def example_simple_model():
     src = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]])
     max_len = src.shape[1]
     src_mask = torch.ones(1, 1, max_len)
-    print(greedy_decode(model, src, src_mask, max_len=max_len, start_symbol=0))
+    decoded_output = greedy_decode(
+        model,
+        src,
+        src_mask,
+        max_len=max_len,
+        start_symbol=0,
+    )
+    print(f"Greedy-decoded output: {decoded_output}")
 
 
 # execute_example(example_simple_model)

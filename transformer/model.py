@@ -7,6 +7,7 @@ import torch.nn as nn
 
 import logging
 
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
@@ -30,21 +31,35 @@ class Transformer(nn.Module):
         self.d_model_ = d_model
         self.encoder = Encoder(n_blocks, d_model, num_heads, d_ff)
         self.decoder = Decoder(n_blocks, d_model, num_heads, d_ff)
+
         self.src_embed = nn.Sequential(
             nn.Embedding(src_vocab_size, d_model),
             PositionalEncoding(d_model, dropout_prob),
         )
-        self.tgt_embed = nn.Embedding(tgt_vocab_size, d_model)
+
+        self.tgt_embed = nn.Sequential(
+            nn.Embedding(tgt_vocab_size, d_model),
+            PositionalEncoding(d_model, dropout_prob),
+        )
+
         self.generator = Generator(d_model, tgt_vocab_size)  # TODO here
 
     def forward(self, src, tgt, src_mask, tgt_mask):
         return self.decode(self.encode(src, src_mask), src_mask, tgt, tgt_mask)
 
     def encode(self, src, src_mask):
-        return self.encoder(self.src_embed(src), src_mask)
+        return self.encoder(
+            self.src_embed(src),
+            src_mask,
+        )
 
     def decode(self, memory, src_mask, tgt, tgt_mask):
-        return self.decoder(self.tgt_embed(tgt), memory, src_mask, tgt_mask)
+        return self.decoder(
+            self.tgt_embed(tgt),
+            memory,
+            src_mask,
+            tgt_mask,
+        )
 
     @property
     def d_model(self):
@@ -129,8 +144,10 @@ class EncoderLayer(nn.Module):
 
     def forward(self, x, mask=None):
         logger.debug(
-            f"EncoderLayer::forward\n x: {x.shape}"
-            + f"mask: {mask.shape if mask is not None else None}"
+            (
+                f"EncoderLayer::forward x: {x.shape}"
+                f"mask: {mask.shape if mask is not None else None}"
+            )
         )
         x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))
         return self.sublayer[1](x, self.feed_forward)
@@ -197,7 +214,7 @@ class PositionwiseFeedForward(nn.Module):
     def forward(self, x):
         # max(0, xW_1 + b_1)W_2 + b_2
         # i.e. relu(xW_1 + b_1) * W_2 + b_2
-        return self.w_2(self.dropout(torch.relu(self.w_1(x))))
+        return self.w_2(self.dropout(self.w_1(x).relu()))
 
 
 class PositionalEncoding(nn.Module):

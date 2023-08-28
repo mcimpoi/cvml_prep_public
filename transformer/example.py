@@ -7,7 +7,8 @@ from transformer.training import run_epoch
 
 from data import generate_synthetic_data, subsequent_mask
 
-from model_reference import make_model, data_gen
+import model_reference as ref
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -93,20 +94,20 @@ def example_inference(decode_steps: int = 10) -> None:
 def example_simple_model_train(
     n_epochs: int = 10,
     batch_size: int = 80,
+    vocab_size: int = DEFAULT_VOCAB_SIZE,
 ):
-    VOCAB_SIZE = 11
-    model: Transformer = get_model(
-        src_vocab_size=VOCAB_SIZE,
-        tgt_vocab_size=VOCAB_SIZE,
+    model = get_model(
+        src_vocab_size=vocab_size,
+        tgt_vocab_size=vocab_size,
         n_blocks=2,
         d_model=512,
-        n_heads=8,
-        d_ff=2048,
     )
+
+    model.train()
 
     optimizer = torch.optim.Adam(
         model.parameters(),
-        lr=0.001,
+        lr=0.5,
         betas=(0.9, 0.98),
         eps=1e-9,
     )
@@ -122,14 +123,13 @@ def example_simple_model_train(
         ),
     )
 
-    label_smoothing = LabelSmoothing(VOCAB_SIZE, padding_idx=0, smoothing=0.0)
+    label_smoothing = LabelSmoothing(vocab_size, padding_idx=0, smoothing=0.0)
 
-    model.train()
     for epoch in range(n_epochs):
         model.train()
         train_loss, _ = run_epoch(
             data_iter=generate_synthetic_data(
-                vocab_size=VOCAB_SIZE,
+                vocab_size=vocab_size,
                 batch_size=batch_size,
                 n_batches=20,
             ),
@@ -145,7 +145,7 @@ def example_simple_model_train(
         model.eval()
         eval_loss, _ = run_epoch(
             data_iter=generate_synthetic_data(
-                vocab_size=VOCAB_SIZE,
+                vocab_size=vocab_size,
                 batch_size=batch_size,
                 n_batches=5,
             ),
@@ -189,6 +189,7 @@ def get_model(
         n_blocks=n_blocks,
         d_model=d_model,
         num_heads=n_heads,
+        d_ff=d_ff,
         src_vocab_size=src_vocab_size,
         tgt_vocab_size=tgt_vocab_size,
         dropout_prob=0.1,
@@ -219,21 +220,20 @@ def test_data_iter(model: Transformer, data_iter=None):
 if __name__ == "__main__":
     # example_inference()
 
-    model = get_model(11, 11, n_blocks=2, d_model=512, n_heads=8)
-    model_ref = make_model(11, 11, N=2, d_model=512)
+    model = get_model(11, 11, n_blocks=2)
+    model_ref = ref.make_model(11, 11, N=2, d_model=512)
+
+    model.eval()
+    model_ref.eval()
 
     data_iter = generate_synthetic_data(11, 2, 5)
-    data_iter_ref = data_gen(11, 2, 5)
+    data_iter_ref = ref.data_gen(11, 2, 5)
 
     test_data_iter(model, data_iter)
     test_data_iter(model_ref, data_iter_ref)
 
-    model.train()
+    print("Reference model")
+    ref.example_simple_model(n_epochs=10)
 
-    example_simple_model_train(n_epochs=40, batch_size=80)
-
-    from model_reference import (
-        example_simple_model as example_simple_model_train_ref,
-    )
-
-    example_simple_model_train_ref()
+    print("My model")
+    example_simple_model_train(n_epochs=10, batch_size=80, vocab_size=11)
