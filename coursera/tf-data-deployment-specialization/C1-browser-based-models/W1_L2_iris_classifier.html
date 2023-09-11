@@ -1,0 +1,26 @@
+<!-- python3 -m http.server 8889 -->
+<html>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+  <script>
+    const csvUrl = "iris.csv";
+    const trainingData = tf.data.csv(csvUrl, {
+      columnConfigs: {
+        species: {
+          isLabel: true,
+        },
+      },
+    });
+    const convertedData = trainingData
+      .map(({ xs, ys }) => {
+        const labels = [
+          ys.species == "setosa" ? 1 : 0,
+          ys.species == "virginica" ? 1 : 0,
+          ys.species == "versicolor" ? 1 : 0,
+        ];
+
+        return { xs: Object.values(xs), ys: Object.values(labels) };
+      })
+      .batch(10);
+  </script>
+  <body></body>
+</html>
