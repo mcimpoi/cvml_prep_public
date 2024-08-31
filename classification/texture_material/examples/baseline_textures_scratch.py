@@ -38,37 +38,36 @@ def get_dtd_dataset_tf(image_size: int) -> Dict[str, tf.data.Dataset]:
 
 
 def preprocessing(examples, image_size=224):
+    import pdb
+
+    pdb.set_trace()
+
     examples["image"] = tf.image.resize(examples["image"], (224, 224))
     return examples
 
 
 def get_dtd_dataset_hf(image_size: int) -> Dict[str, tf.data.Dataset]:
-    dtd_dataset = datasets.load_dataset("mcimpoi/dtd_split_1")
+    dtd_dataset = datasets.load_dataset("mcimpoi/dtd_split_1", streaming=True)
     data_collator = transformers.DefaultDataCollator(return_tensors="tf")
 
-    train_ds = (
-        dtd_dataset["train"]
-        .map(partial(preprocessing, image_size=224))
-        .to_tf_dataset(
-            columns=["image", "label"],
-            batch_size=32,
-            shuffle=True,
-            collate_fn=data_collator,
-        )
-    )
-    val_ds = (
-        dtd_dataset["validation"]
-        .map(preprocessing)
-        .to_tf_dataset(
-            columns=["image", "label"],
-            batch_size=32,
-            shuffle=True,
-            collate_fn=data_collator,
-        )
-    )
-    test_ds = dtd_dataset["test"].to_tf_dataset()
+    train_ds = dtd_dataset["train"].map(partial(preprocessing, image_size=224))
 
-    return {"train": train_ds, "validation": val_ds, "test": test_ds}
+    # val_ds = (
+    #     dtd_dataset["validation"]
+    #     .map(preprocessing)
+    #     .to_tf_dataset(
+    #         columns=["image", "label"],
+    #         batch_size=32,
+    #         shuffle=True,
+    #         collate_fn=data_collator,
+    #     )
+    # )
+    # test_ds = dtd_dataset["test"].to_tf_dataset()
+
+    return {
+        "train": train_ds,
+        # "validation": [], "test": []
+    }
 
 
 def build_uncompiled_model(
@@ -114,15 +113,16 @@ def build_uncompiled_model(
 
 def main() -> None:
     image_sz = 224
-    model = build_uncompiled_model(image_sz, 47)
-    model.compile(
-        loss="sparse_categorical_crossentropy", optimizer="adam", metrics=["accuracy"]
-    )
 
     dtd_data = get_dtd_dataset_hf(image_sz)
 
     example_batch = next(iter(dtd_data["train"]))
     show_batch(example_batch["image"], example_batch["label"], None)
+
+    model = build_uncompiled_model(image_sz, 47)
+    model.compile(
+        loss="sparse_categorical_crossentropy", optimizer="adam", metrics=["accuracy"]
+    )
 
     history = model.fit(
         dtd_data["train"],

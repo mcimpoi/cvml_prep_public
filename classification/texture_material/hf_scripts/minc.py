@@ -32,9 +32,11 @@ def patch_minc_2500(dataset_root: str) -> None:
                 f.write(line.replace("images/", ""))
 
 
-if __name__ == "__main__":
+def push_minc2500_to_hf_hub():
+    """ Tries to load MINC-2500 from Hugging Face Hub, if it fails, builds it and pushes to hub."""
     try:
         dataset = datasets.load_dataset(HF_HUB_MINC_DATASET_NAME)
+        print(dataset)
     except FileNotFoundError:
         patch_minc_2500(SRC_DATA_DIR)
 
@@ -53,4 +55,6 @@ if __name__ == "__main__":
         )
         dataset.push_to_hub(HF_HUB_MINC_DATASET_NAME)
 
-    print(dataset)
+
+if __name__ == "__main__":
+    push_minc2500_to_hf_hub()
