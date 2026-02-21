@@ -1,0 +1,14 @@
+[project]
+name = "dlai"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "diffusers>=0.36.0",
+    "ipykernel>=7.2.0",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.2",
+    "torch>=2.10.0",
+    "torchvision>=0.25.0",
+    "tqdm>=4.67.3",
+]
