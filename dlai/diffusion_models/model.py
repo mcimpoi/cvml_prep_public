@@ -18,13 +18,16 @@ class ContextUnet(nn.Module):
 
         self.init_conv = ResidualConvBlock(in_channels, n_features, is_res=True)
 
-        self.down1 = UnetDown(n_features, n_features)  # down1: [10, 256, 8, 8]
-        self.down2 = UnetDown(n_features, n_features * 2)  # down2: [10, 256, 4, 4]
+        self.down1 = UnetDown(n_features, n_features)  # down1: [B, n_features, H/2, W/2]
+        self.down2 = UnetDown(n_features, n_features * 2)  # down2: [B, 2*n_features, H/4, W/4]
 
-        self.to_vec = nn.Sequential(nn.AvgPool2d(4), nn.GELU())  # to_vec: [10, 512]
+        self.to_vec = nn.Sequential(nn.AvgPool2d(self.img_dim // 4), nn.GELU())  # to_vec: [B, 2*n_features, 1, 1]
 
-        self.time_emb1 = EmbedFC(1, 2 * n_features)
-        self.time_emb2 = EmbedFC(1, n_features)
+        self.pos_emb1 = SinusoidalPositionEmbeddings(2 * n_features)
+        self.pos_emb2 = SinusoidalPositionEmbeddings(n_features)
+
+        self.time_emb1 = EmbedFC(2 * n_features, 2 * n_features)
+        self.time_emb2 = EmbedFC(n_features, n_features)
         self.context_emb1 = EmbedFC(n_context_features, 2 * n_features)
         self.context_emb2 = EmbedFC(n_context_features, n_features)
 
@@ -35,8 +38,8 @@ class ContextUnet(nn.Module):
             nn.GroupNorm(8, 2 * n_features),
             nn.ReLU(),
         )
-        self.up1 = UnetUp(4 * n_features, n_features)  # up1: [10, 256, 8, 8]
-        self.up2 = UnetUp(2 * n_features, n_features)  # up2: [10, 256, 16, 16]
+        self.up1 = UnetUp(4 * n_features, n_features)  # up1: [B, 2*n_features, H/2, W/2]
+        self.up2 = UnetUp(2 * n_features, n_features)  # up2: [B, n_features, H, W]
 
         self.out = nn.Sequential(
             nn.Conv2d(
@@ -77,10 +80,10 @@ class ContextUnet(nn.Module):
             -1, self.n_features, 1, 1
         )  # [B, n_features, 1, 1]
 
-        time_emb1 = self.time_emb1(t).view(
+        time_emb1 = self.time_emb1(self.pos_emb1(t)).view(
             -1, 2 * self.n_features, 1, 1
         )  # [B, 2*n_features, 1, 1]
-        time_emb2 = self.time_emb2(t).view(
+        time_emb2 = self.time_emb2(self.pos_emb2(t)).view(
             -1, self.n_features, 1, 1
         )  # [B, n_features, 1, 1]
 
@@ -205,3 +208,24 @@ class EmbedFC(nn.Module):
     def forward(self, x):
         x = x.view(-1, self.input_dim)
         return self.model(x)
+
+class SinusoidalPositionEmbeddings(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, time):
+        time = time.float()
+        device = time.device
+        half_dim = self.dim // 2
+
+        # Frequencies
+        embeddings = torch.log(torch.tensor(10000.0, device=device)) / (half_dim - 1)
+        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
+        
+        # multiply time by frequencies
+        embeddings = time[:, None] * embeddings[None, :]
+        
+        # sine and cosine pairs
+        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+        return embeddings
