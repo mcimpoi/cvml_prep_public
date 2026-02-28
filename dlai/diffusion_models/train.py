@@ -4,17 +4,15 @@ import click
 
 import torch
 import torch.nn.functional as F
-import torchinfo
 from torch.utils.tensorboard import SummaryWriter
 
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from diffusers import UNet2DModel
-
-import matplotlib.pyplot as plt
+from diffusers import UNet2DConditionModel
 
 from model import ContextUnet
 from data_utilities import SpritesDataset, transform
+from model_utilities import print_model_summary, plot_loss
 
 log = logging.getLogger(__name__)
 
@@ -126,11 +124,12 @@ def train_model(
             img_dim=img_dim,
         ).to(device)
     elif model_type == "unet2d":
-        model = UNet2DModel(
+        model = UNet2DConditionModel(
             sample_size=img_dim,  # the target image resolution
             in_channels=n_channels,  # the number of input channels, 3 for RGB images
             out_channels=n_channels,  # the number of output channels
             layers_per_block=2,  # how many layers to use per UNet block
+            cross_attention_dim=n_context_features,
             block_out_channels=(
                 n_features,
                 n_features * 2,
@@ -160,14 +159,12 @@ def train_model(
             resume_from, model, device
         )
 
+    print_model_summary(model_type,model, device, img_dim, n_channels)
+
     model.train()
     if compile_model and hasattr(torch, "compile"):
         model = torch.compile(model)  # for faster training in PyTorch 2.0+
-    
-    summary_batch_size = 12
-    t_dummy = torch.zeros(summary_batch_size, device=device).long()
-    x_dummy = torch.zeros(summary_batch_size, n_channels, img_dim, img_dim, device=device)
-    torchinfo.summary(model, input_data=(x_dummy, t_dummy))
+
 
     optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
     if optim_state_dict is not None:
@@ -200,7 +197,8 @@ def train_model(
             x_perturbed = perturb_input(x, t, noise, ab_t)
 
             if model_type == "unet2d":
-                predicted_noise = model(x_perturbed, t).sample
+                ctx = context.unsqueeze(1) if context is not None else torch.zeros((x.shape[0], 1, n_context_features), device=device)
+                predicted_noise = model(x_perturbed, t, encoder_hidden_states=ctx).sample
             else:
                 predicted_noise = model(x_perturbed, t.float(), context=context)
 
@@ -220,15 +218,7 @@ def train_model(
             path = f"{save_dir}/{model_name}/epoch_{(ep + 1):03d}.pth"
             save_checkpoint(model, optim, ep + 1, global_step, losses, path)
 
-    plot_path = f"{save_dir}/{model_name}/loss.png"
-    plt.figure()
-    plt.plot(losses)
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("Training loss")
-    plt.savefig(plot_path, bbox_inches="tight")
-    plt.close()
-    log.info(f"Saved loss plot: {plot_path}")
+    plot_loss(losses, save_dir, model_name)
     writer.close()
 
     return model
